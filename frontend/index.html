@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fuel Optimized Routing MVP</title>
+    <!-- Leaflet CSS -->
+    <link
+      rel="stylesheet"
+      href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="sidebar">
+      <div class="header">
+        <h2>EcoRouter <span style="font-size: 0.6em">MVP</span></h2>
+      </div>
+
+      <div class="input-group">
+        <label>Start Location</label>
+        <input
+          type="text"
+          id="start-input"
+          placeholder="e.g. Ben Thanh Market"
+          value="Ben Thanh Market"
+        />
+      </div>
+
+      <div class="input-group">
+        <label>Destination</label>
+        <input
+          type="text"
+          id="dest-input"
+          placeholder="e.g. Tan Son Nhat Airport"
+          value="Tan Son Nhat Airport"
+        />
+      </div>
+
+      <div class="row">
+        <div class="input-group half">
+          <label>Vehicle</label>
+          <select id="vehicle-select">
+            <option value="motorbike">Motorbike</option>
+            <option value="car">Car</option>
+            <option value="truck">Truck</option>
+          </select>
+        </div>
+        <div class="input-group half">
+          <label>Fuel Price (VND)</label>
+          <input type="number" id="fuel-price" value="24000" />
+        </div>
+      </div>
+
+      <button id="calc-btn" onclick="calculateRoutes()">Find Best Route</button>
+
+      <div id="loading" class="hidden">Calculating physics...</div>
+      <div id="error-msg" class="hidden"></div>
+
+      <div id="results-panel" class="hidden">
+        <h3>Route Options</h3>
+        <div id="routes-list"></div>
+      </div>
+    </div>
+
+    <div id="map"></div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
