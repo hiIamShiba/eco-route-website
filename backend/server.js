@@ -15,6 +15,9 @@ app.use(express.static(path.join(__dirname, "../frontend")));
 const OSRM_API = "http://router.project-osrm.org/route/v1/driving";
 const NOMINATIM_API = "https://nominatim.openstreetmap.org/search";
 
+// --- CACHING ---
+const searchCache = {};
+
 // --- VEHICLE DATA ---
 // Consumption: Liters per 100km
 // Optimal Speed: The speed (km/h) where the engine is most efficient
@@ -104,36 +107,54 @@ function calculateFuel(route, vehicleType) {
 // --- API ENDPOINT ---
 app.post("/api/calculate-route", async (req, res) => {
   try {
-    const { start, destination, vehicleType, fuelPrice } = req.body;
+    const {
+      start,
+      destination,
+      vehicleType,
+      fuelPrice,
+      startLat,
+      startLon,
+      destLat,
+      destLon,
+    } = req.body;
 
-    if (!start || !destination) {
-      return res.status(400).json({ error: "Start and Destination required" });
+    let startCoords, endCoords;
+
+    // 1. GET START COORDINATES
+    if (startLat && startLon) {
+      // Option A: Frontend gave us coordinates (Perfect!)
+      startCoords = { lat: parseFloat(startLat), lon: parseFloat(startLon) };
+    } else {
+      // Option B: Frontend only gave text, we must search (Fallback)
+      startCoords = await getCoordinates(start);
     }
 
-    // 1. Geocode locations
-    const startCoords = await getCoordinates(start);
-    const endCoords = await getCoordinates(destination);
+    // 2. GET END COORDINATES
+    if (destLat && destLon) {
+      endCoords = { lat: parseFloat(destLat), lon: parseFloat(destLon) };
+    } else {
+      endCoords = await getCoordinates(destination);
+    }
 
+    // Validation
     if (!startCoords || !endCoords) {
-      return res.status(404).json({ error: "Locations not found" });
+      return res.status(404).json({
+        error: "Locations not found. Please try selecting from the dropdown.",
+      });
     }
 
-    // 2. Fetch Routes from OSRM (Request alternatives)
+    // 3. Fetch Routes from OSRM
     const osrmUrl = `${OSRM_API}/${startCoords.lon},${startCoords.lat};${endCoords.lon},${endCoords.lat}`;
 
+    // ... (The rest of the code is exactly the same as before) ...
     const osrmResponse = await axios.get(osrmUrl, {
-      params: {
-        overview: "full",
-        geometries: "geojson",
-        alternatives: "true", // Request multiple routes
-      },
+      params: { overview: "full", geometries: "geojson", alternatives: "true" },
     });
 
     if (!osrmResponse.data.routes || osrmResponse.data.routes.length === 0) {
       return res.status(404).json({ error: "No route found" });
     }
 
-    // 3. Process and Optimize Routes
     const processedRoutes = osrmResponse.data.routes.map((route, index) => {
       const fuelStats = calculateFuel(route, vehicleType);
       const cost = fuelStats.fuelUsed * (fuelPrice || 0);
@@ -146,28 +167,67 @@ app.post("/api/calculate-route", async (req, res) => {
         fuelUsedLiters: fuelStats.fuelUsed,
         fuelCost: cost.toFixed(0),
         avgSpeed: fuelStats.avgSpeed,
-        isFastest: index === 0, // OSRM usually puts fastest first
-        score: fuelStats.fuelUsed, // Lower is better
+        isFastest: index === 0,
+        score: fuelStats.fuelUsed,
       };
     });
 
-    // Sort by Fuel Used (Lowest first) to find Eco-Route
     const sortedByFuel = [...processedRoutes].sort(
       (a, b) => a.fuelUsedLiters - b.fuelUsedLiters,
     );
-
-    // Identify the "Eco" route
-    const ecoRouteId = sortedByFuel[0].id;
 
     res.json({
       start: startCoords,
       end: endCoords,
       routes: processedRoutes,
-      bestFuelRouteId: ecoRouteId,
+      bestFuelRouteId: sortedByFuel[0].id,
     });
   } catch (error) {
-    console.error("Server Error:", error);
+    console.error("Server Error:", error.message);
     res.status(500).json({ error: "Internal Server Error" });
+  }
+});
+
+// Autocomplete Search Endpoint
+app.get("/api/search", async (req, res) => {
+  const query = req.query.q;
+
+  if (!query || query.length < 3) {
+    return res.json([]);
+  }
+
+  // 1. Check Cache
+  const cacheKey = query.toLowerCase();
+  if (searchCache[cacheKey]) {
+    console.log(`Returning cached result for: ${query}`);
+    return res.json(searchCache[cacheKey]);
+  }
+
+  // 2. Fetch from Nominatim
+  try {
+    const response = await axios.get(NOMINATIM_API, {
+      params: {
+        q: query,
+        format: "json",
+        addressdetails: 1,
+        limit: 5,
+      },
+      headers: { "User-Agent": "EcoRouteMVP/1.0" },
+    });
+
+    const results = response.data.map((item) => ({
+      display_name: item.display_name,
+      lat: item.lat,
+      lon: item.lon,
+    }));
+
+    // 3. Save to Cache
+    searchCache[cacheKey] = results;
+
+    res.json(results);
+  } catch (error) {
+    console.error("Search API Error:", error.message);
+    res.status(500).json({ error: "Search failed" });
   }
 });
 

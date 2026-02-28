@@ -19,22 +19,30 @@
 
       <div class="input-group">
         <label>Start Location</label>
-        <input
-          type="text"
-          id="start-input"
-          placeholder="e.g. Ben Thanh Market"
-          value="Ben Thanh Market"
-        />
+        <div class="autocomplete-wrapper">
+          <input
+            type="text"
+            id="start-input"
+            placeholder="e.g. Ben Thanh Market"
+            value="Ben Thanh Market"
+            autocomplete="off"
+          />
+          <div id="start-suggestions" class="suggestions-list hidden"></div>
+        </div>
       </div>
 
       <div class="input-group">
         <label>Destination</label>
-        <input
-          type="text"
-          id="dest-input"
-          placeholder="e.g. Tan Son Nhat Airport"
-          value="Tan Son Nhat Airport"
-        />
+        <div class="autocomplete-wrapper">
+          <input
+            type="text"
+            id="dest-input"
+            placeholder="e.g. Tan Son Nhat Airport"
+            value="Tan Son Nhat Airport"
+            autocomplete="off"
+          />
+          <div id="dest-suggestions" class="suggestions-list hidden"></div>
+        </div>
       </div>
 
       <div class="row">

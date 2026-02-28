@@ -25,18 +25,23 @@ const routesList = document.getElementById("routes-list");
 
 // --- MAIN FUNCTION ---
 async function calculateRoutes() {
-  // 1. Reset UI
   loadingDiv.classList.remove("hidden");
   errorDiv.classList.add("hidden");
   resultsPanel.classList.add("hidden");
   routesList.innerHTML = "";
   clearMap();
 
+  // Create payload with Coordinates AND Text
   const payload = {
     start: startInput.value,
     destination: destInput.value,
     vehicleType: vehicleSelect.value,
     fuelPrice: parseFloat(fuelPriceInput.value),
+    // Send hidden coordinates if they exist
+    startLat: startInput.dataset.lat || null,
+    startLon: startInput.dataset.lon || null,
+    destLat: destInput.dataset.lat || null,
+    destLon: destInput.dataset.lon || null,
   };
 
   try {
@@ -52,14 +57,9 @@ async function calculateRoutes() {
     if (!response.ok)
       throw new Error(data.error || "Failed to calculate route");
 
-    // Store the ID of the best fuel route globally
     bestRouteId = data.bestFuelRouteId;
-
-    // 2. Render Everything
     renderMap(data);
     renderSidebar(data);
-
-    // 3. Auto-select the Best/Eco route initially
     highlightRoute(bestRouteId);
   } catch (err) {
     loadingDiv.classList.add("hidden");
@@ -197,9 +197,9 @@ function highlightRoute(selectedId) {
     } else {
       // UNSELECTED STYLE
       item.layer.setStyle({
-        color: "#9aa0a6", // Grey
-        weight: 4, // Thinner
-        opacity: 0.4, // Faded
+        color: "#666666",
+        weight: 6,
+        opacity: 0.7,
       });
     }
   });
@@ -216,3 +216,88 @@ function highlightRoute(selectedId) {
     }
   });
 }
+
+// --- AUTOCOMPLETE LOGIC ---
+
+// 1. Debounce Utility (Wait 300ms before calling API)
+function debounce(func, wait) {
+  let timeout;
+  return function (...args) {
+    const context = this;
+    clearTimeout(timeout);
+    timeout = setTimeout(() => func.apply(context, args), wait);
+  };
+}
+
+// 2. Setup Autocomplete Function
+function setupAutocomplete(inputId, suggestionsId) {
+  const input = document.getElementById(inputId);
+  const list = document.getElementById(suggestionsId);
+
+  // Event Listener with Debounce
+  input.addEventListener(
+    "input",
+    debounce(async (e) => {
+      const query = e.target.value;
+
+      // Validation: Min 3 chars (Nominatim requirement for good results)
+      if (query.length < 3) {
+        list.innerHTML = "";
+        list.classList.add("hidden");
+        return;
+      }
+
+      try {
+        // Call Backend API
+        const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+        const results = await res.json();
+
+        // Render Results
+        renderSuggestions(results, list, input);
+      } catch (err) {
+        console.error("Autocomplete error:", err);
+      }
+    }, 300),
+  );
+
+  // Hide list when focusing out (optional delay to allow click)
+  document.addEventListener("click", (e) => {
+    if (e.target !== input && e.target !== list) {
+      list.classList.add("hidden");
+    }
+  });
+}
+
+// 3. Render Helper
+function renderSuggestions(results, listElement, inputElement) {
+  listElement.innerHTML = "";
+  if (!results.length) {
+    listElement.classList.add("hidden");
+    return;
+  }
+
+  results.forEach((place) => {
+    const item = document.createElement("div");
+    item.className = "suggestion-item";
+    item.innerHTML = `<span class="suggestion-icon">📍</span><span>${place.display_name}</span>`;
+
+    item.onclick = () => {
+      // 1. Fill the text
+      inputElement.value = place.display_name;
+
+      // 2. SAVE THE COORDINATES (Hidden)
+      inputElement.dataset.lat = place.lat;
+      inputElement.dataset.lon = place.lon;
+
+      // 3. Clear the list
+      listElement.innerHTML = "";
+      listElement.classList.add("hidden");
+    };
+    listElement.appendChild(item);
+  });
+  listElement.classList.remove("hidden");
+}
+
+// --- INITIALIZE AUTOCOMPLETE ---
+setupAutocomplete("start-input", "start-suggestions");
+setupAutocomplete("dest-input", "dest-suggestions");
